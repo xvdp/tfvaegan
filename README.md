@@ -42,6 +42,22 @@ For installing, follow these intructions
 conda env create -f environment.yml
 conda activate pytorch0.3.1
 ```
+## Training
+
+### Zero-Shot Image Classification
+```
+CUB : python image_scripts/run_cub_tfvaegan.py
+AWA : python image_scripts/run_awa_tfvaegan.py
+FLO : python image_scripts/run_flo_tfvaegan.py
+SUN : python image_scripts/run_sun_tfvaegan.py
+
+```
+### Zero-Shot Action Classification
+```
+HMDB51 : python action_scripts/run_hmdb51_tfvaegan.py
+UCF101 : python action_scripts/run_ucf101_tfvaegan.py
+
+```
 
 ## Contact:
 Should you have any question, please contact sanath.narayan@inceptioniai.org or akshita.gupta@inceptioniai.org
