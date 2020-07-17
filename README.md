@@ -26,18 +26,8 @@
   </tr>
 </table>
 
-If you find this useful, please cite our work as follows:
-```
-@article{narayan2020latent,
-  title={Latent Embedding Feedback and Discriminative Features for Zero-Shot Classification},
-  author={Narayan, Sanath and Gupta, Akshita and Khan, Fahad Shahbaz and Snoek, Cees GM and Shao, Ling},
-  journal={arXiv preprint arXiv:2003.07833},
-  year={2020}
-}
-```
-
 ## Installation
-The model is built in PyTorch 0.3.1 and tested on Ubuntu 16.04 environment (Python3.6, CUDA9.0, cuDNN7.5).
+The codebase is built on PyTorch 0.3.1 and tested on Ubuntu 16.04 environment (Python3.6, CUDA9.0, cuDNN7.5).
 
 For installing, follow these intructions
 ```
@@ -61,5 +51,14 @@ UCF101 : python action_scripts/run_ucf101_tfvaegan.py
 
 ```
 
-## Contact:
-Should you have any question, please contact sanath.narayan@inceptioniai.org or akshita.gupta@inceptioniai.org
+## Citation:
+
+If you find this useful, please cite our work as follows:
+```
+@article{narayan2020latent,
+  title={Latent Embedding Feedback and Discriminative Features for Zero-Shot Classification},
+  author={Narayan, Sanath and Gupta, Akshita and Khan, Fahad Shahbaz and Snoek, Cees GM and Shao, Ling},
+  journal={arXiv preprint arXiv:2003.07833},
+  year={2020}
+}
+```
