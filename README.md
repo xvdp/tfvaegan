@@ -17,12 +17,12 @@
 
 <table>
   <tr>
-    <td> <img src = "images/decoder.png" width="600"> </td>
     <td> <img src = "images/feedback.png" width="600"> </td>
+    <td> <img src = "images/decoder.png" width="600"> </td>
   </tr>
   <tr >
-    <td><p align="center"><b> Discriminative Feature Transformation </b></p></td>
     <td><p align="center"> <b> Feedback Module </b></p></td>
+    <td><p align="center"><b> Discriminative Feature Transformation </b></p></td>
   </tr>
 </table>
 
