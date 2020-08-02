@@ -6,6 +6,8 @@
 
 **Code:** Coming Soon
 
+**Video Presentation:** [Short talk](https://youtu.be/Jq0glS1DwGg) , [Long talk](https://youtu.be/tNmyfKVUIpo)
+
 ## **Overall Architecture:** 
 
 <p align="center">
