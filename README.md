@@ -6,7 +6,7 @@
 
 **Code:** Coming Soon
 
-**Video Presentation:** [Short talk](https://youtu.be/Jq0glS1DwGg) , [Long talk](https://youtu.be/tNmyfKVUIpo)
+**Video Presentation:** [Short summary](https://youtu.be/Jq0glS1DwGg) , [Overview](https://youtu.be/tNmyfKVUIpo)
 
 ## **Overall Architecture:** 
 
