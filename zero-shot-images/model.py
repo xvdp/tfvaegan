@@ -1,3 +1,4 @@
+#author: akshitac8
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -22,7 +23,7 @@ class Encoder(nn.Module):
         layer_sizes = opt.encoder_layer_sizes
         latent_size = opt.latent_size
         if opt.conditional:
-            layer_sizes[0] += latent_size #att_size
+            layer_sizes[0] += latent_size
 
         self.fc1=nn.Linear(layer_sizes[0], layer_sizes[-1])
         self.fc3=nn.Linear(layer_sizes[-1], latent_size*2)
@@ -86,8 +87,8 @@ class Discriminator_D1(nn.Module):
 
     def forward(self, x, att):
         h = torch.cat((x, att), 1) 
-        self.hidden = self.lrelu(self.fc1(h))
-        h = self.fc2(self.hidden)
+        h = self.lrelu(self.fc1(h))
+        h = self.fc2(h)
         return h
 
 #unconditional discriminator for transductive
@@ -101,8 +102,8 @@ class Discriminator_D2(nn.Module):
         self.apply(weights_init)
 
     def forward(self, x):
-        self.h1 = self.lrelu(self.fc1(x))
-        h = self.fc2(self.h1)
+        h = self.lrelu(self.fc1(x))
+        h = self.fc2(h)
         return h
 
 #Feedback Modules

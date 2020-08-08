@@ -245,6 +245,9 @@ for epoch in range(0,opt.nepoch):
             else:
                 recon_x = netG(latent_code, c=input_attv)
 
+            vae_loss_seen = loss_fn(recon_x, input_resv, means, log_var)
+            errG = vae_loss_seen
+
             if opt.encoded_noise:
                 criticG_fake = netD(recon_x,input_attv).mean()
                 fake = recon_x 
@@ -255,12 +258,11 @@ for epoch in range(0,opt.nepoch):
                     fake = feedback_module(gen_out=latent_code_noise, att=input_attv, netG=netG, netDec=netDec, netF=netF)
                 else:
                     fake = netG(latent_code_noise, c=input_attv)
+                criticG_fake = netD(fake,input_attv).mean()    
             
-            criticG_fake = netD(fake,input_attv).mean()    
-            vae_loss_seen = loss_fn(recon_x, input_resv, means, log_var)
             G_cost = -criticG_fake
             # Add vae loss and generator loss
-            errG = vae_loss_seen + opt.gammaG*G_cost
+            errG += opt.gammaG*G_cost
             netDec.zero_grad()
             recons_fake = netDec(fake)
             R_cost = WeightedL1(recons_fake, input_attv, bce=opt.bce_att, gt_bce=Variable(input_bce_att))

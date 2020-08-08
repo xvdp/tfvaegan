@@ -51,8 +51,7 @@ input_att = torch.FloatTensor(opt.batch_size, opt.attSize)
 noise = torch.FloatTensor(opt.batch_size, opt.nz)
 one = torch.FloatTensor([1])
 mone = one * -1
-##########
-# Cuda
+
 if opt.cuda:
     netG.cuda()
     netD.cuda()
@@ -78,12 +77,13 @@ def WeightedL1(pred, gt):
     loss = wt * (pred-gt).abs()
     return loss.sum()/loss.size(0)
            
-def feedback_module(gen_out, att, netG, netDec, netF):
+def feedback_module(gen_out, att, feed_weight, netG, netDec, netF):
+    #feedback operation at loop=1
     syn_fake = netG(gen_out, c=att)
     recons = netDec(syn_fake)
     recons_hidden_feat = netDec.getLayersOutDet()
     feedback_out = netF(recons_hidden_feat)
-    syn_fake = netG(gen_out, a1=opt.a1, c=att, feedback_layers=feedback_out)
+    syn_fake = netG(gen_out, a1=feed_weight, c=att, feedback_layers=feedback_out)
     return syn_fake
 
 def sample():
@@ -110,7 +110,7 @@ def generate_syn_feature(netG, classes, attribute, num, netF=None, netDec=None):
         syn_noise.normal_(0, 1)
         syn_noisev = Variable(syn_noise,volatile=True)
         syn_attv = Variable(syn_att,volatile=True)
-        output = feedback_module(gen_out=syn_noisev, att=syn_attv, netG=netG, netDec=netDec, netF=netF)
+        output = feedback_module(gen_out=syn_noisev, att=syn_attv, feed_weight=opt.a2, netG=netG, netDec=netDec, netF=netF)
         syn_feature.narrow(0, i*num, num).copy_(output.data.cpu())
         syn_label.narrow(0, i*num, num).fill_(iclass)
     return syn_feature, syn_label
@@ -191,7 +191,7 @@ for epoch in range(0,opt.nepoch):
 
                 #feedback loop
                 if loop == 1:
-                    fake = feedback_module(gen_out=latent_code, att=input_attv, netG=netG, netDec=netDec, netF=netF)
+                    fake = feedback_module(gen_out=latent_code, att=input_attv, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
                 else:
                     fake = netG(latent_code, c=input_attv)
                 criticD_fake = netD(fake.detach(), input_attv)
@@ -216,13 +216,16 @@ for epoch in range(0,opt.nepoch):
             # Train netG and Decoder
             for p in netD.parameters():
                 p.requires_grad = False
+            
+            if opt.recons_weight > 0 and opt.freeze_dec:
+                for p in netDec.parameters():
+                    p.requires_grad = False
                         
             netE.zero_grad()
             netG.zero_grad()
             netF.zero_grad()
             input_resv = Variable(input_res)
             input_attv = Variable(input_att)
-            #This is outside the opt.encoded_noise condition because of the vae loss
             means, log_var = netE(input_resv, input_attv)
             std = torch.exp(0.5 * log_var)
             eps = torch.randn([opt.batch_size, opt.latent_size])
@@ -230,9 +233,13 @@ for epoch in range(0,opt.nepoch):
             eps = Variable(eps)
             latent_code = eps * std + means
             if loop == 1:
-                recon_x = feedback_module(gen_out=latent_code, att=input_attv, netG=netG, netDec=netDec, netF=netF)
+                recon_x = feedback_module(gen_out=latent_code, att=input_attv, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
             else:
                 recon_x = netG(latent_code, c=input_attv)
+            
+            # vae loss 
+            vae_loss_seen = loss_fn(recon_x, input_resv, means, log_var)
+            errG = vae_loss_seen
 
             if opt.encoded_noise:
                 criticG_fake = netD(recon_x,input_attv).mean()
@@ -241,15 +248,14 @@ for epoch in range(0,opt.nepoch):
                 noise.normal_(0, 1)
                 latent_code_noise = Variable(noise)
                 if loop == 1:
-                    fake = feedback_module(gen_out=latent_code_noise, att=input_attv, netG=netG, netDec=netDec, netF=netF)
+                    fake = feedback_module(gen_out=latent_code_noise, att=input_attv, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
                 else:
                     fake = netG(latent_code_noise, c=input_attv)
-            
-            criticG_fake = netD(fake,input_attv).mean()    
-            vae_loss_seen = loss_fn(recon_x, input_resv, means, log_var)
+                criticG_fake = netD(fake,input_attv).mean()
+                    
             G_cost = -criticG_fake
-            # Add vae loss and generator loss
-            errG = vae_loss_seen + opt.gammaG*G_cost
+            # Add generator loss
+            errG += opt.gammaG*G_cost
             netDec.zero_grad()
             recons_fake = netDec(fake)
             R_cost = WeightedL1(recons_fake, input_attv)
@@ -260,8 +266,8 @@ for epoch in range(0,opt.nepoch):
             optimizerG.step()
             if loop == 1:
                 optimizerF.step()
-            optimizerDec.step() 
-        
+            if opt.recons_weight > 0 and not opt.freeze_dec: # not train decoder at feedback time
+                optimizerDec.step()        
     # Print losses
     print('[%d/%d]  Loss_D: %.4f Loss_G: %.4f, Wasserstein_dist:%.4f, vae_loss_seen:%.4f'% \
     (epoch, opt.nepoch, D_cost.data[0], G_cost.data[0], Wasserstein_D.data[0],vae_loss_seen.data[0]),end=" ")
@@ -304,4 +310,3 @@ if opt.gzsl:
     print('the best GZSL seen accuracy is', best_acc_seen)
     print('the best GZSL unseen accuracy is', best_acc_unseen)
     print('the best GZSL H is', best_gzsl_acc)
-    

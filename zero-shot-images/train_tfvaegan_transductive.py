@@ -8,13 +8,13 @@ import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 import numpy as np
 import random
-
-# load files
-import util
+#load files
 import classifier
 import model
+import util
 from config import opt
 
+#set seeds
 if opt.manualSeed is None:
     opt.manualSeed = random.randint(1, 10000)
 print("Random Seed: ", opt.manualSeed)
@@ -26,6 +26,7 @@ if opt.cuda:
 cudnn.benchmark = True
 if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+
 # load data
 data = util.DATA_LOADER(opt)
 print("# of training samples: ", data.ntrain)
@@ -40,6 +41,7 @@ netD2 = model.Discriminator_D2(opt)
 netF = model.Feedback(opt)
 netDec = model.AttDec(opt,opt.attSize)
 
+#print models
 print(netE)
 print(netG)
 print(netD)
@@ -50,13 +52,12 @@ print(netDec)
 
 # Init Tensors
 input_res = torch.FloatTensor(opt.batch_size, opt.resSize)
-input_att = torch.FloatTensor(opt.batch_size, opt.attSize) #attSize class-embedding size
+input_att = torch.FloatTensor(opt.batch_size, opt.attSize)
 input_res_D2 = torch.FloatTensor(opt.batch_size, opt.resSize)
 input_att_D2 = torch.FloatTensor(opt.batch_size, opt.attSize)
 noise = torch.FloatTensor(opt.batch_size, opt.nz)
 one = torch.FloatTensor([1])
 mone = one * -1
-##########
 
 if opt.cuda:
     netG.cuda() 
@@ -85,27 +86,26 @@ def WeightedL1(pred, gt):
     loss = wt * (pred-gt).abs()
     return loss.sum()/loss.size(0)
 
-def feedback_module(gen_out, att, netG, netDec, netF):
-    syn_fake = netG(gen_out, c=att)
-    recons = netDec(syn_fake)
+def feedback_module(gen_out, att, feed_weight, netG, netDec, netF):
+    #feedback operation at loop=1
+    fake = netG(gen_out, c=att)
+    recons = netDec(fake)
     recons_hidden_feat = netDec.getLayersOutDet()
     feedback_out = netF(recons_hidden_feat)
-    syn_fake = netG(gen_out, a1=opt.a1, c=att, feedback_layers=feedback_out)
-    return syn_fake
+    fake = netG(gen_out, a1=feed_weight, c=att, feedback_layers=feedback_out)
+    return fake
 
-# only seen classes sample
 def sample():
     #data loader
     batch_feature, batch_att = data.next_seen_batch(opt.batch_size)
     input_res.copy_(batch_feature)
     input_att.copy_(batch_att)
 
-# only unseen classes sample
 def trans_sample():
+    #data loader
     trans_batch_feature, trans_batch_att = data.next_unseen_batch(opt.batch_size)
     input_res_D2.copy_(trans_batch_feature)
     input_att_D2.copy_(trans_batch_att)
-
 
 def generate_syn_feature(netG, classes, attribute, num, netF=None, netDec=None):
     #unseen feature synthesis
@@ -120,12 +120,11 @@ def generate_syn_feature(netG, classes, attribute, num, netF=None, netDec=None):
     for i in range(nclass):
         iclass = classes[i]
         iclass_att = attribute[iclass]
-        #replicate the attributes
         syn_att.copy_(iclass_att.repeat(num, 1))
         syn_noise.normal_(0, 1)
         syn_noisev = Variable(syn_noise,volatile=True)
         syn_attv = Variable(syn_att,volatile=True)
-        output = feedback_module(gen_out=syn_noisev, att=syn_attv, netG=netG, netDec=netDec, netF=netF)
+        output = feedback_module(gen_out=syn_noisev, att=syn_attv, feed_weight=opt.a2, netG=netG, netDec=netDec, netF=netF)
         syn_feature.narrow(0, i*num, num).copy_(output.data.cpu())
         syn_label.narrow(0, i*num, num).fill_(iclass)
     return syn_feature, syn_label
@@ -137,7 +136,6 @@ optimizerE         = optim.Adam(netE.parameters(), lr=opt.lr)
 optimizerG         = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 optimizerF         = optim.Adam(netF.parameters(), lr=opt.feed_lr, betas=(opt.beta1, 0.999))
 optimizerDec       = optim.Adam(netDec.parameters(), lr=opt.dec_lr, betas=(opt.beta1, 0.999))
-
 
 def calc_gradient_penalty(netD,real_data, fake_data,input_att=None):
     alpha = torch.rand(opt.batch_size, 1)
@@ -159,8 +157,10 @@ def calc_gradient_penalty(netD,real_data, fake_data,input_att=None):
                               grad_outputs=ones,
                               create_graph=True, retain_graph=True, only_inputs=True)[0]
     if input_att is None:
+        #gradient penalty calculation for unconditional discriminator D2
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * opt.lambda2
     else:
+        #gradient penalty calculation for unconditional discriminator D1
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * opt.lambda1
     return gradient_penalty
 
@@ -169,9 +169,7 @@ best_zsl_acc = 0
 if opt.gzsl:
     best_gzsl_acc = 0
 
-#Training loop
 for epoch in range(0,opt.nepoch):
-    #feedback training loop
     for loop in range(0,opt.feedback_loop):
         for i in range(0, data.ntrain, opt.batch_size):
 
@@ -180,10 +178,11 @@ for epoch in range(0,opt.nepoch):
             for p in netD.parameters():
                 p.requires_grad = True
                 
-            #unfreeze deocder
+            #unfreeze decoder
             for p in netDec.parameters():
                 p.requires_grad = True
             
+            # Train D1 and Decoder
             gp_sum = 0
             for iter_d in range(opt.critic_iter):
                 sample()
@@ -210,13 +209,12 @@ for epoch in range(0,opt.nepoch):
                 else:
                     noise.normal_(0, 1)
                     latent_code = Variable(noise)
-                
+
                 #feedback loop
                 if loop == 1:
-                    fake = feedback_module(gen_out=latent_code, att=input_attv, netG=netG, netDec=netDec, netF=netF)
+                    output = feedback_module(gen_out=latent_code, att=input_attv, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
                 else:
                     fake = netG(latent_code, c=input_attv)
-
                 criticD_fake = netD(fake.detach(), input_attv)
                 criticD_fake = opt.gammaD*criticD_fake.mean()
                 criticD_fake.backward(one)
@@ -225,14 +223,14 @@ for epoch in range(0,opt.nepoch):
                 gp_sum += gradient_penalty.data
                 gradient_penalty.backward()         
                 Wasserstein_D = criticD_real - criticD_fake
-                D_cost = criticD_fake - criticD_real + gradient_penalty #add Y here and #add vae reconstruction loss
+                D_cost = criticD_fake - criticD_real + gradient_penalty
                 optimizerD.step()
 
-            ############Discriminator D2 ##############
             #unfreeze discrimator
             for p in netD2.parameters():
                 p.requires_grad = True
                 
+            # Train D2
             for iter_d in range(opt.critic_iter):
                 trans_sample()
                 netD2.zero_grad()          
@@ -243,24 +241,22 @@ for epoch in range(0,opt.nepoch):
                 criticD2_real.backward(mone)
                 noise.normal_(0, 1)
                 latent_code_noise = Variable(noise)
-
-                #feedback loop
                 if loop == 1:
-                    fakeD2 = feedback_module(gen_out=latent_code_noise, att=input_attv_D2, netG=netG, netDec=netDec, netF=netF)
+                    fake_D2 = feedback_module(gen_out=latent_code_noise, att=input_attv_D2, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
                 else:
-                    fakeD2 = netG(latent_code_noise, c=input_attv_D2)
-
-                criticD2_fake = netD2(fakeD2.detach())
+                    fake_D2 = netG(latent_code_noise, c=input_attv_D2)
+                criticD2_fake = netD2(fake_D2.detach())
                 criticD2_fake = opt.gammaD2*criticD2_fake.mean()
                 criticD2_fake.backward(one)
                 # gradient penalty
-                gradient_penalty_D2 = opt.gammaD2*calc_gradient_penalty(netD2, input_res_D2, fakeD2.data)
+                gradient_penalty_D2 = opt.gammaD2*calc_gradient_penalty(netD2, input_res_D2, fake_D2.data)
                 gp_sum += gradient_penalty_D2.data
                 gradient_penalty_D2.backward()         
                 Wasserstein_D2 = criticD2_real - criticD2_fake
                 D2_cost = criticD2_fake - criticD2_real + gradient_penalty_D2 #add Y here and #add vae reconstruction loss
                 optimizerD2.step()
 
+            # Adaptive lambda
             gp_sum /= (opt.gammaD2*opt.lambda1*2*opt.critic_iter)
             if (gp_sum > 1.05).sum() > 0:
                 opt.lambda2 *= 1.1
@@ -269,18 +265,21 @@ for epoch in range(0,opt.nepoch):
                 opt.lambda2 /= 1.1
                 opt.lambda1 /= 1.1
 
-            #############netG training ##############
             # Train netG and Decoder
+            #freeze discrimator
             for p in netD.parameters():
                 p.requires_grad = False
+
+            if opt.recons_weight > 0 and opt.freeze_dec:
+                 #freeze decoder
+                for p in netDec.parameters():
+                    p.requires_grad = False
 
             netE.zero_grad()
             netG.zero_grad()
             netF.zero_grad()
             input_resv = Variable(input_res)
             input_attv = Variable(input_att)
-
-            #This is outside the opt.encoded_noise condition because of the vae loss
             means, log_var = netE(input_resv, input_attv)
             std = torch.exp(0.5 * log_var)
             eps = torch.randn([opt.batch_size, opt.latent_size])
@@ -288,9 +287,13 @@ for epoch in range(0,opt.nepoch):
             eps = Variable(eps)
             latent_code = eps * std + means
             if loop == 1:
-                recon_x = feedback_module(gen_out=latent_code, att=input_attv, netG=netG, netDec=netDec, netF=netF)
+                recon_x = feedback_module(gen_out=latent_code, att=input_attv, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
             else:
                 recon_x = netG(latent_code, c=input_attv)
+
+            #vae loss
+            vae_loss_seen = loss_fn(recon_x, input_resv, means, log_var)
+            errG = vae_loss_seen
 
             if opt.encoded_noise:
                 criticG_fake = netD(recon_x,input_attv).mean()
@@ -299,50 +302,49 @@ for epoch in range(0,opt.nepoch):
                 noise.normal_(0, 1)
                 latent_code_noise = Variable(noise)
                 if loop == 1:
-                    fake = feedback_module(gen_out=latent_code_noise, att=input_attv, netG=netG, netDec=netDec, netF=netF)
+                    fake = feedback_module(gen_out=latent_code_noise, att=input_attv, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
                 else:
                     fake = netG(latent_code_noise, c=input_attv)
-            
-            criticG_fake = netD(fake, input_attv).mean()
-            vae_loss_seen = loss_fn(recon_x, input_resv, means, log_var) # minimize E
+                criticG_fake = netD(fake, input_attv).mean()
+
             G_cost = -criticG_fake
-            # Add vae loss and generator loss
+            #generator loss
+            errG += opt.gammaG*G_cost
             netDec.zero_grad()
             recons_fake = netDec(fake)
             R_cost = WeightedL1(recons_fake, input_attv)
             # Add reconstruction loss
-            errG = vae_loss_seen + opt.gammaG*G_cost # + opt.recons_weight*R_cost
             errG += opt.recons_weight * R_cost
-
-            #freeze discrimator D2
-            for p in netD2.parameters(): 
+            
+            #freeze discrimator
+            for p in netD2.parameters():
                 p.requires_grad = False
-
             input_attv_D2 = Variable(input_att_D2)
             noise.normal_(0, 1)
             latent_code_noise = Variable(noise)
             if loop == 1:
-                fakeD2 = feedback_module(gen_out=latent_code_noise, att=input_attv_D2, netG=netG, netDec=netDec, netF=netF)
+                fake_D2 = feedback_module(gen_out=latent_code_noise, att=input_attv_D2, feed_weight=opt.a1, netG=netG, netDec=netDec, netF=netF)
             else:
-                fakeD2 = netG(latent_code_noise, c=input_attv_D2)
-            criticG_fake_D2 = netD2(fakeD2).mean()
-            recons_fake_2 = netDec(fakeD2)
+                fake_D2 = netG(latent_code_noise, c=input_attv_D2)
+            criticG_fake_D2 = netD2(fake_D2).mean()
+            recons_fake_2 = netDec(fake_D2)
             R_cost_D2 = WeightedL1(recons_fake_2, input_attv_D2)
-            G_cost_D2 = -criticG_fake_D2
+            errG += opt.recons_weight * R_cost_D2
 
-            errG += opt.recons_weight*R_cost_D2
+            G_cost_D2 = -criticG_fake_D2
             errG += opt.gammaG_D2*G_cost_D2
-            errG.backward()
             
+            errG.backward()
             optimizerE.step()
             optimizerG.step()
             if loop == 1:
                 optimizerF.step()
-            optimizerDec.step()
+            if opt.recons_weight > 0 and not opt.freeze_dec:
+                optimizerDec.step()
     
     # Print losses
     print('[%d/%d]  Loss_D: %.4f Loss_G: %.4f, Wasserstein_dist:%.4f, vae_loss_seen:%.4f'% \
-    (epoch, opt.nepoch, D_cost.data[0], G_cost.data[0], Wasserstein_D.data[0], vae_loss_seen.data[0]),end=" ")
+    (epoch, opt.nepoch, D_cost.data[0], G_cost.data[0], Wasserstein_D.data[0],vae_loss_seen.data[0]),end=" ")
     # Evaluation
     netG.eval()
     netDec.eval()
