@@ -22,9 +22,7 @@ class Encoder(nn.Module):
         super(Encoder,self).__init__()
         layer_sizes = opt.encoder_layer_sizes
         latent_size = opt.latent_size
-        if opt.conditional:
-            layer_sizes[0] += latent_size
-
+        layer_sizes[0] += latent_size
         self.fc1=nn.Linear(layer_sizes[0], layer_sizes[-1])
         self.fc3=nn.Linear(layer_sizes[-1], latent_size*2)
         self.lrelu = nn.LeakyReLU(0.2, True)
@@ -49,10 +47,7 @@ class Generator(nn.Module):
 
         layer_sizes = opt.decoder_layer_sizes
         latent_size=opt.latent_size
-        if opt.conditional:
-            input_size = latent_size * 2
-        else:
-            input_size = latent_size
+        input_size = latent_size * 2
         self.fc1 = nn.Linear(input_size, layer_sizes[0])
         self.fc3 = nn.Linear(layer_sizes[0], layer_sizes[1])
         self.lrelu = nn.LeakyReLU(0.2, True)
@@ -60,7 +55,7 @@ class Generator(nn.Module):
         self.apply(weights_init)
 
     def _forward(self, z, c=None):
-        if c is not None: z = torch.cat((z, c), dim=-1)
+        z = torch.cat((z, c), dim=-1)
         x1 = self.lrelu(self.fc1(z))
         x = self.sigmoid(self.fc3(x1))
         self.out = x1
@@ -70,7 +65,7 @@ class Generator(nn.Module):
         if feedback_layers is None:
             return self._forward(z,c)
         else:
-            if c is not None: z = torch.cat((z, c), dim=-1)
+            z = torch.cat((z, c), dim=-1)
             x1 = self.lrelu(self.fc1(z))
             feedback_out = x1 + a1*feedback_layers
             x = self.sigmoid(self.fc3(feedback_out))
@@ -87,8 +82,8 @@ class Discriminator_D1(nn.Module):
 
     def forward(self, x, att):
         h = torch.cat((x, att), 1) 
-        h = self.lrelu(self.fc1(h))
-        h = self.fc2(h)
+        self.hidden = self.lrelu(self.fc1(h))
+        h = self.fc2(self.hidden)
         return h
 
 #unconditional discriminator for transductive
@@ -102,8 +97,8 @@ class Discriminator_D2(nn.Module):
         self.apply(weights_init)
 
     def forward(self, x):
-        h = self.lrelu(self.fc1(x))
-        h = self.fc2(h)
+        self.h1 = self.lrelu(self.fc1(x))
+        h = self.fc2(self.h1)
         return h
 
 #Feedback Modules
@@ -121,11 +116,9 @@ class Feedback(nn.Module):
 
 
 class AttDec(nn.Module):
-    def __init__(self, opt, attSize, conditional=False):
+    def __init__(self, opt, attSize):
         super(AttDec, self).__init__()
         self.embedSz = 0
-        if conditional:
-            self.embedSz = attSize
         self.fc1 = nn.Linear(opt.resSize + self.embedSz, opt.ngh)
         self.fc3 = nn.Linear(opt.ngh, attSize)
         self.lrelu = nn.LeakyReLU(0.2, True)

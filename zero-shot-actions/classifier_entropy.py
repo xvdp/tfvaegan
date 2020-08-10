@@ -1,3 +1,4 @@
+#author: sanath
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -23,21 +24,20 @@ class CLASSIFIER:
         self.input_dim = _train_X.size(1)
         self.syn_feat = syn_feature
         self.syn_label = syn_label
-
         self.cuda = _cuda
-        self.netDec = netDec
-        self.netDec.eval()
-        self.input_dim = self.input_dim + dec_size #4096
-        self.use_mult_rep = use_mult_rep
-        if self.use_mult_rep:
-            self.input_dim += dec_hidden_size
-        self.dec_size = dec_size
-
         self.model = ODDetector(self.input_dim, self.hidden_size, self.nclass)
-        self.train_X = self.compute_dec_out(self.train_X,self.input_dim, self.use_mult_rep)
-        self.syn_feat = self.compute_dec_out(self.syn_feat,self.input_dim, self.use_mult_rep)
-        self.test_unseen_feature = self.compute_dec_out(self.test_unseen_feature,self.input_dim, self.use_mult_rep)
-        self.test_seen_feature = self.compute_dec_out(self.test_seen_feature,self.input_dim, self.use_mult_rep)
+        self.netDec = netDec
+        if self.netDec:
+            self.netDec.eval()
+            self.input_dim = self.input_dim + dec_size #4096
+            self.use_mult_rep = use_mult_rep
+            if self.use_mult_rep:
+                self.input_dim += dec_hidden_size
+            self.model = ODDetector(self.input_dim, self.hidden_size, self.nclass)
+            self.train_X = self.compute_dec_out(self.train_X,self.input_dim, self.use_mult_rep)
+            self.syn_feat = self.compute_dec_out(self.syn_feat,self.input_dim, self.use_mult_rep)
+            self.test_unseen_feature = self.compute_dec_out(self.test_unseen_feature,self.input_dim, self.use_mult_rep)
+            self.test_seen_feature = self.compute_dec_out(self.test_seen_feature,self.input_dim, self.use_mult_rep)
 
         self.seen_cls_model = seen_classifier.best_model
         self.unseen_cls_model = unseen_classifier.best_model

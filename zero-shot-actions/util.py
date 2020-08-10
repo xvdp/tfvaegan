@@ -1,11 +1,8 @@
-#import h5py
+#author: akshitac8
 import numpy as np
 import scipy.io as sio
 import torch
 from sklearn import preprocessing
-import sys
-import pdb
-import h5py
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -49,17 +46,15 @@ class DATA_LOADER(object):
             m_att /= m_att.pow(2).sum(1).sqrt().unsqueeze(1).expand(101,m_att.size(1))
             self.attribute = m_att
 
-        self.bce_attribute = temp_att
-        self.bce_attribute_norm = self.bce_attribute/self.bce_attribute.pow(2).sum(1).sqrt().unsqueeze(1).expand(self.attribute.size(0),self.attribute.size(1))
-
-
         if not opt.validation:
             if opt.preprocessing:
                 if opt.standardization:
                     print('standardization...')
                     scaler = preprocessing.StandardScaler()
+                    scaler_att = preprocessing.StandardScaler()
                 else:
                     scaler = preprocessing.MinMaxScaler()
+                    scaler_att = preprocessing.MinMaxScaler()
                 
                 _train_feature = scaler.fit_transform(feature[trainval_loc])
                 _test_seen_feature = scaler.transform(feature[test_seen_loc])
@@ -74,6 +69,16 @@ class DATA_LOADER(object):
                 self.test_seen_feature = torch.from_numpy(_test_seen_feature).float() 
                 self.test_seen_feature.mul_(1/mx)
                 self.test_seen_label = torch.from_numpy(label[test_seen_loc]).long()
+                # Scaled and transformed (0,1) attributes
+                self.bce_att = opt.bce_att
+                if opt.orig_att_for_bce:
+                    temp_att = torch.from_numpy(scaler_att.fit_transform(orig_att)).float()
+                else:
+                    temp_att = torch.from_numpy(scaler_att.fit_transform(self.attribute)).float()
+                mx_att = temp_att.max()
+                temp_att.mul_(1/mx)
+                self.bce_attribute = temp_att
+                self.bce_attribute_norm = self.bce_attribute/self.bce_attribute.pow(2).sum(1).sqrt().unsqueeze(1).expand(self.attribute.size(0),self.attribute.size(1))
 
             else:
                 self.train_feature = torch.from_numpy(feature[trainval_loc]).float()
@@ -108,11 +113,3 @@ class DATA_LOADER(object):
         batch_att = self.attribute[batch_label]
         batch_bce_att = self.bce_attribute[batch_label]
         return batch_feature, batch_att, batch_bce_att
-
-    def next_unseen_batch(self, unseen_batch):
-       idx = torch.randperm(self.ntest_unseen)[0:unseen_batch]
-       batch_feature = self.test_unseen_feature[idx]
-       batch_label = self.test_unseen_label[idx]
-       batch_att = self.attribute[batch_label]
-
-       return batch_feature, batch_att

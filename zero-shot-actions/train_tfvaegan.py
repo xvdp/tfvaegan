@@ -289,13 +289,13 @@ for epoch in range(0,opt.nepoch):
         seen_class = data.seenclasses.size(0)
         clsu = classifier.CLASSIFIER(syn_feature, util.map_label(syn_label, data.unseenclasses), data, data.unseenclasses.size(0), \
                                     opt.cuda, _nepoch=25, _batch_size=opt.syn_num, use_dec=opt.zsl_dec, netDec=netDec, dec_size=opt.attSize, \
-                                    use_mult_rep=opt.use_mult_rep)
+                                    dec_hidden_size=4096, use_mult_rep=opt.use_mult_rep)
         clss = classifier.CLASSIFIER(data.train_feature, util.map_label(data.train_label,data.seenclasses), data, seen_class, opt.cuda, \
                                     _nepoch=25, _batch_size=opt.syn_num, test_on_seen=True, use_dec=opt.zsl_dec, netDec=netDec, \
-                                    dec_size=opt.attSize, use_mult_rep=opt.use_mult_rep)
+                                    dec_size=opt.attSize, dec_hidden_size=4096, use_mult_rep=opt.use_mult_rep)
         clsg = classifier_entropy.CLASSIFIER(data.train_feature, util.map_label(data.train_label,data.seenclasses), data, seen_class, \
                                             syn_feature, syn_label, opt.cuda, clss, clsu, _batch_size=128, use_dec=opt.zsl_dec, \
-                                            netDec=netDec, dec_size=opt.attSize, use_mult_rep=opt.use_mult_rep)
+                                            netDec=netDec, dec_size=opt.attSize, dec_hidden_size=4096, use_mult_rep=opt.use_mult_rep)
         if best_gzsl_acc < clsg.H:
             best_acc_seen, best_acc_unseen, best_gzsl_acc = clsg.acc_seen, clsg.acc_unseen, clsg.H
         print('GZSL-OD: Acc seen=%.4f, Acc unseen=%.4f, h=%.4f' % (clsg.acc_seen, clsg.acc_unseen, clsg.H))
@@ -304,7 +304,7 @@ for epoch in range(0,opt.nepoch):
     # Train ZSL classifier
     zsl_cls = classifier.CLASSIFIER(syn_feature, util.map_label(syn_label, data.unseenclasses), data, data.unseenclasses.size(0), \
                                     opt.cuda, opt.classifier_lr, 0.5, 25, opt.syn_num, generalized=False, use_dec=opt.zsl_dec, netDec=netDec, \
-                                    dec_size=opt.attSize, use_mult_rep=opt.use_mult_rep)
+                                    dec_size=opt.attSize, dec_hidden_size=4096, use_mult_rep=opt.use_mult_rep)
     acc = zsl_cls.acc
     if best_zsl_acc < acc:
         best_zsl_acc = acc
@@ -314,7 +314,7 @@ for epoch in range(0,opt.nepoch):
     netDec.train()
     netF.train()
 
-
+#Best results
 print('Dataset', opt.dataset)
 print('the best ZSL unseen accuracy is', best_zsl_acc)
 if opt.gzsl_od:

@@ -83,8 +83,8 @@ def feedback_module(gen_out, att, feed_weight, netG, netDec, netF):
     recons = netDec(syn_fake)
     recons_hidden_feat = netDec.getLayersOutDet()
     feedback_out = netF(recons_hidden_feat)
-    syn_fake = netG(gen_out, a1=feed_weight, c=att, feedback_layers=feedback_out)
-    return syn_fake
+    fake = netG(gen_out, a1=feed_weight, c=att, feedback_layers=feedback_out)
+    return fake
 
 def sample():
     #data loader
@@ -253,14 +253,16 @@ for epoch in range(0,opt.nepoch):
                     fake = netG(latent_code_noise, c=input_attv)
                 criticG_fake = netD(fake,input_attv).mean()
                     
-            G_cost = -criticG_fake
             # Add generator loss
+            G_cost = -criticG_fake
             errG += opt.gammaG*G_cost
+
+            # Add reconstruction loss
             netDec.zero_grad()
             recons_fake = netDec(fake)
             R_cost = WeightedL1(recons_fake, input_attv)
-            # Add reconstruction loss
             errG += opt.recons_weight * R_cost
+            
             errG.backward()
             optimizerE.step()
             optimizerG.step()
